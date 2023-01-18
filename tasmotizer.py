@@ -15,7 +15,7 @@ from PyQt5.QtGui import QPixmap
 from PyQt5.QtNetwork import QNetworkRequest, QNetworkAccessManager, QNetworkReply
 from PyQt5.QtSerialPort import QSerialPortInfo, QSerialPort
 from PyQt5.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton, QComboBox, QWidget, QCheckBox, QRadioButton, \
-    QButtonGroup, QFileDialog, QProgressBar, QLabel, QMessageBox, QDialogButtonBox, QGroupBox, QFormLayout, QStatusBar
+    QButtonGroup, QFileDialog, QProgressBar, QLabel, QMessageBox, QPlainTextEdit, QDialogButtonBox, QGroupBox, QFormLayout, QStatusBar
 
 import banner
 
@@ -600,13 +600,39 @@ class Tasmotizer(QDialog):
 
         self.pbQuit = QPushButton('Quit')
         self.pbQuit.setStyleSheet('background-color: #c91017;')
-        self.pbQuit.setFixedSize(QSize(50, 50))
+        self.pbQuit.setFixedSize(QSize(200, 50))
+
 
         hl_btns = HLayout([50, 3, 50, 3])
-        hl_btns.addWidgets([self.pbTasmotize, self.pbConfig, self.pbGetIP, self.pbQuit])
-
+        hl_btns.addWidgets([self.pbTasmotize, self.pbConfig, self.pbGetIP])
+        
         vl.addWidgets([gbPort, gbBackup, gbFW])
         vl.addLayout(hl_btns)
+        
+        
+        self.commandLine = QLineEdit("command")
+        commandLineLayout = HLayout()
+        commandLineLayout.addWidget(self.commandLine)
+        
+        self.pbSendCommand = QPushButton("Send Command")
+        self.pbSendCommand.setStyleSheet('background-color: #aaaa00;')
+        self.pbSendCommand.setFixedSize(QSize(200,50))
+        sendCommnadButtonLayout = HLayout()
+        sendCommnadButtonLayout.addWidget(self.pbSendCommand)
+        
+        consoleResponseField = QPlainTextEdit()
+        consoleResponseFieldLayout = HLayout()
+        consoleResponseFieldLayout.addWidget(consoleResponseField)
+
+        vl.addLayout(consoleResponseFieldLayout)
+        vl.addLayout(commandLineLayout)
+        vl.addLayout(sendCommnadButtonLayout)
+
+        quitLayout = HLayout()
+        quitLayout.addWidgets([self.pbQuit])
+        vl.addLayout(quitLayout)
+
+        self.pbSendCommand.clicked.connect(self.sendCommand)
 
         pbRefreshPorts.clicked.connect(self.refreshPorts)
         self.rbgFW.buttonClicked[int].connect(self.setBinMode)
@@ -619,6 +645,10 @@ class Tasmotizer(QDialog):
         self.pbConfig.clicked.connect(self.send_config)
         self.pbGetIP.clicked.connect(self.get_ip)
         self.pbQuit.clicked.connect(self.reject)
+    
+    def sendCommand(self):
+        print(f"fake sending :> {self.commandLine.text()}")
+    
 
     def refreshPorts(self):
         self.cbxPort.clear()
