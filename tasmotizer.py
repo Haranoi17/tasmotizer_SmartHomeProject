@@ -11,7 +11,7 @@ import json
 from datetime import datetime
 
 from PyQt5.QtCore import QUrl, Qt, QThread, QObject, pyqtSignal, pyqtSlot, QSettings, QTimer, QSize, QIODevice
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QPixmap, QCloseEvent
 from PyQt5.QtNetwork import QNetworkRequest, QNetworkAccessManager, QNetworkReply
 from PyQt5.QtSerialPort import QSerialPortInfo, QSerialPort
 from PyQt5.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton, QComboBox, QWidget, QCheckBox, QRadioButton, \
@@ -283,8 +283,8 @@ class SendConfigDialog(QDialog):
             self.done(QDialog.Accepted)
 
         
-class CommandDialog(QDialog):
-    def __init__(self):
+class CommandDialog(QWidget):
+    def __init__(self, port):
         super().__init__()
         self.setMinimumWidth(640)
         self.setWindowTitle('Serial Terminal')
@@ -293,6 +293,33 @@ class CommandDialog(QDialog):
         self.module_mode = 0
 
         self.createUI()
+
+        self.port = QSerialPort(port)
+        self.port.setBaudRate(115200)
+        self.port.open(QIODevice.OpenModeFlag.ReadWrite)
+        self.port.readyRead.connect(self.readFromPort)
+
+    def sendCommand(self):
+        if self.commandLine.toPlainText():
+            try:
+                formatedTxt = self.commandLine.toPlainText().split()
+                formatedTxt = " ".join(formatedTxt) + "\n"
+                bytes_sent = self.port.write(bytes(formatedTxt, 'utf-8'))
+            except Exception as e:
+                QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
+            # else:
+                # QMessageBox.information(self, 'Done', 'Command sent ({} bytes).'.format(bytes_sent))
+            # finally:
+                # if self.port.isOpen():
+                    # ret = str(self.port.readAll(), 'utf-8')
+                    # self.cmdDlg.consoleResponseField.setText(ret)
+        else:
+            QMessageBox.information(self, 'Done', 'Nothing to send')
+
+    def readFromPort(self):
+        data = self.port.readAll()
+        if len(data) > 0:
+            self.consoleResponseField.append( data.data().decode('utf-8') )
 
     def createUI(self):
         vl = VLayout()
@@ -320,6 +347,9 @@ class CommandDialog(QDialog):
         vl.addLayout(consoleResponseFieldLayout)
         vl.addLayout(commandLineLayout)
         vl.addLayout(sendCommnadButtonLayout)
+
+        # Bind buttons
+        self.pbSendCommand.clicked.connect(self.sendCommand)
     
     def setModuleMode(self, radio):
         self.module_mode = radio
@@ -335,6 +365,10 @@ class CommandDialog(QDialog):
 
         self.commands = 'backlog {}\n'.format(';'.join(backlog))
         self.done(QDialog.Accepted)
+
+    def closeEvent(self, a0: QCloseEvent) -> None:
+        self.port.close()
+        return super().closeEvent(a0)
 
 
 class ProcessDialog(QDialog):
@@ -663,7 +697,7 @@ class Tasmotizer(QDialog):
         vl.addWidgets([gbPort, gbBackup, gbFW])
         vl.addLayout(hl_btns)
         
-        self.pbSendCommand = QPushButton("Command dialog")
+        self.pbSendCommand = QPushButton("Serial terminal")
         self.pbSendCommand.setStyleSheet('background-color: #aaaa00;')
         self.pbSendCommand.setFixedSize(QSize(200,50))
         sendCommnadButtonLayout = HLayout()
@@ -690,32 +724,10 @@ class Tasmotizer(QDialog):
         self.pbQuit.clicked.connect(self.reject)
     
     def sendCommandDialog(self):
-        self.cmdDlg = CommandDialog()
-        self.cmdDlg.pbSendCommand.clicked.connect(self.sendCommand)
-        if self.cmdDlg.exec_() == QDialog.Accepted:
-            self.sendCommand()
-            
-
-    def sendCommand(self):
-        if self.cmdDlg.commandLine.toPlainText():
-            try:
-                self.port = QSerialPort(self.cbxPort.currentData())
-                self.port.setBaudRate(115200)
-                self.port.open(QIODevice.OpenModeFlag.ReadWrite)
-                formatedTxt = self.cmdDlg.commandLine.toPlainText().split()
-                formatedTxt = " ".join(formatedTxt) + "\n"
-                bytes_sent = self.port.write(bytes(formatedTxt, 'utf-8'))
-            except Exception as e:
-                QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
-            else:
-                QMessageBox.information(self, 'Done', 'Command sent ({} bytes).'.format(bytes_sent))
-            finally:
-                if self.port.isOpen():
-                    ret = str(self.port.readAll(), 'utf-8')
-                    self.cmdDlg.consoleResponseField.setText(ret)
-                    self.port.close()
-        else:
-            QMessageBox.information(self, 'Done', 'Nothing to send')
+        self.cmdDlg = CommandDialog(port=self.cbxPort.currentData())
+        self.cmdDlg.show()
+        # if self.cmdDlg.exec_() == QDialog.Accepted:
+            # self.sendCommand()
 
     def refreshPorts(self):
         self.cbxPort.clear()
