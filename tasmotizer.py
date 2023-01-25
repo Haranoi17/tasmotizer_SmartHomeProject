@@ -22,6 +22,8 @@ import banner
 from gui import HLayout, VLayout, GroupBoxH, GroupBoxV, SpinBox, dark_palette
 from utils import MODULES, NoBinFile, NetworkError
 
+from copy import deepcopy
+
 __version__ = '1.2.1'
 
 BINS_URL = 'http://ota.tasmota.com'
@@ -292,13 +294,111 @@ class PinConfigDialog(QDialog):
 
         self.commands = None
         self.module_mode = 0
-
         self.port = QSerialPort(port)
-        self.port.setBaudRate(115200)
-        self.port.open(QIODevice.OpenModeFlag.ReadWrite)
-
         self.createUI()
         self.loadSettings()
+
+    def getComponents(self):
+        return json.loads("""{"0":"None","5728":"Option \
+A","32":"Button","64":"Button_n"\
+,"96":"Button_i","128":"Button_i\
+n","160":"Switch","192":"Switch_\
+n","3264":"Rotary A","3296":"Rot\
+ary B","6272":"Rotary A_n","6304\
+":"Rotary B_n","224":"Relay","25\
+6":"Relay_i","8672":"Relay_b","8\
+704":"Relay_bi","288":"Led","320\
+":"Led_i","352":"Counter","384":\
+"Counter_n","416":"PWM","448":"P\
+WM_i","480":"Buzzer","512":"Buzz\
+er_i","544":"LedLink","576":"Led\
+Link_i","3840":"Output Hi","3872\
+":"Output Lo","7584":"Heartbeat"\
+,"7616":"Heartbeat_i","8096":"Re\
+set","608":"I2C SCL","640":"I2C \
+SDA","832":"SSPI MISO","864":"SS\
+PI MOSI","896":"SSPI SCLK","928"\
+:"SSPI CS","960":"SSPI DC","3200\
+":"Serial Tx","3232":"Serial Rx"\
+,"1184":"DHT11","1216":"AM2301",\
+"1248":"SI7021","8128":"MS01","1\
+280":"DHT11_o","1312":"DS18x20",\
+"1344":"DS18x20_o","1376":"WS281\
+2","3136":"ALux IrRcv","3168":"A\
+Lux IrSel","3008":"MY92x1 DI","3\
+040":"MY92x1 DCKI","2912":"SM167\
+16 CLK","2944":"SM16716 DAT","29\
+76":"SM16716 PWR","4032":"SM2135\
+ Clk","4064":"SM2135 Dat","8448"\
+:"SM2335 Clk","8480":"SM2335 Dat\
+","8384":"BP5758D Clk","8416":"B\
+P5758D Dat","2272":"Tuya Tx","23\
+04":"Tuya Rx","4128":"EXS Enable\
+","4640":"MOODL Tx","5568":"SHD \
+Boot 0","5600":"SHD Reset","1056\
+":"IRsend","1088":"IRrecv","2592\
+":"HLWBL SEL","2624":"HLWBL SEL_\
+i","2656":"HLWBL CF1","2688":"HL\
+W8012 CF","2720":"BL0937 CF","34\
+56":"ADE7953 IRQ","8832":"ADE795\
+3 RST","3072":"CSE7766 Tx","3104\
+":"CSE7766 Rx","2752":"MCP39F5 T\
+x","2784":"MCP39F5 Rx","2816":"M\
+CP39F5 Rst","1472":"PZEM0XX Tx",\
+"1504":"PZEM004 Rx","1536":"PZEM\
+016 Rx","1568":"PZEM017 Rx","748\
+8":"BL0939 Rx","5056":"BL0940 Rx\
+","7520":"BL0942 Rx","7072":"ZC \
+Pulse","1792":"SerBr Tx","1824":\
+"SerBr Rx","4096":"DeepSleep"}""")
+
+    def getGPIOS(self):
+        return json.loads("""{
+
+    "GPI O0":{
+        "0":"None"
+    },
+    "GPIO1":{
+        "0":"N one"
+    },
+    "GPIO2":{
+        "416":"PWM1"
+    },
+    "GP IO3":{
+        "0":"None"
+    },
+    "GPIO4":{
+        "0":" None"
+    },
+    "GPIO5":{
+        "0":"None"
+    },
+    "GPI O9":{
+        "0":"None"
+    },
+    "GPIO10":{
+        "0":" None"
+    },
+    "GPIO12":{
+        "0":"None"
+    },
+    "GP IO13":{
+        "0":"None"
+    },
+    "GPIO14":{
+        "0":"None"
+    },
+    "GPIO15":{
+        "0":"None"
+    },
+    " GPIO16":{
+        "0":"None"
+    },
+    "GPIO17":{
+        " 0":"None"
+    }
+
+}""")
 
     def createUI(self):
         vl = VLayout()
@@ -331,12 +431,32 @@ class PinConfigDialog(QDialog):
         self.gbModule.addWidgets([self.cbModule, self.leTemplate])
         self.rbgModule.buttonClicked[int].connect(self.setModuleMode)
 
+        vGPIOLayout = VLayout()
+        gpios = self.getGPIOS()
+        gpioDict = self.getComponents()
+        self.comboBoxesForGPIOS = {}
+
+        for gpioNumber, currentModule in gpios.items():
+            newComboBox = QComboBox()
+            for value, name in gpioDict.items():
+                newComboBox.addItem(f"{name} ({value})")
+
+            self.comboBoxesForGPIOS[gpioNumber] = newComboBox
+            
+            labelComboLayout = HLayout()
+            labelComboLayout.addWidgets([QLabel(gpioNumber), newComboBox])
+            vGPIOLayout.addLayout(labelComboLayout)
+
+
+        print(self.comboBoxesForGPIOS)
         # layout all widgets
         hl_wifis_mqtt = HLayout(0)
         # hl_wifis_mqtt.addWidget(self.gbMQTT)
 
+
         vl.addLayout(hl_wifis_mqtt)
         vl.addWidget(self.gbModule)
+        vl.addLayout(vGPIOLayout)
 
         btns = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Close)
         btns.accepted.connect(self.accept)
@@ -361,6 +481,19 @@ class PinConfigDialog(QDialog):
 
     def accept(self):
         ok = True
+
+        try:
+            self.port.setBaudRate(115200)
+            self.port.open(QIODevice.OpenModeFlag.ReadWrite)
+
+            self.port.write(b"co kolwiek ja se to dopisze")
+            self.port.waitForBytesWritten()
+           
+        except Exception as e:
+            QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
+        finally:
+            self.port.close()
+
 
         # if self.gbWifi.isChecked() and (len(self.leAP.text()) == 0 or len(self.leAPPwd.text()) == 0):
         #     ok = False
