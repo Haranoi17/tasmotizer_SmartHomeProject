@@ -15,7 +15,7 @@ from PyQt5.QtGui import QPixmap
 from PyQt5.QtNetwork import QNetworkRequest, QNetworkAccessManager, QNetworkReply
 from PyQt5.QtSerialPort import QSerialPortInfo, QSerialPort
 from PyQt5.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton, QComboBox, QWidget, QCheckBox, QRadioButton, \
-    QButtonGroup, QFileDialog, QProgressBar, QLabel, QMessageBox, QPlainTextEdit, QDialogButtonBox, QGroupBox, QFormLayout, QStatusBar
+    QButtonGroup, QFileDialog, QProgressBar, QLabel, QMessageBox, QPlainTextEdit, QTextEdit, QDialogButtonBox, QGroupBox, QFormLayout, QStatusBar
 
 import banner
 
@@ -244,6 +244,108 @@ class SendConfigDialog(QDialog):
 
             if self.gbWifi.isChecked():
                 backlog.extend(['ssid1 {}'.format(self.leAP.text()), 'password1 {}'.format(self.leAPPwd.text())])
+
+            if self.gbRecWifi.isChecked():
+                backlog.extend(['ssid2 Recovery', 'password2 a1b2c3d4'])
+
+            if self.gbMQTT.isChecked():
+                backlog.extend(['mqtthost {}'.format(self.leBroker.text()), 'mqttport {}'.format(self.sbPort.value())])
+
+                topic = self.leTopic.text()
+                if topic and topic != 'tasmota':
+                    backlog.append('topic {}'.format(topic))
+
+                fulltopic = self.leFullTopic.text()
+                if fulltopic and fulltopic != '%prefix%/%topic%/':
+                    backlog.append('fulltopic {}'.format(fulltopic))
+
+                fname = self.leFriendlyName.text()
+                if fname:
+                    backlog.append('friendlyname {}'.format(fname))
+
+                mqttuser = self.leMQTTUser.text()
+                if mqttuser:
+                    backlog.append('mqttuser {}'.format(mqttuser))
+
+                    mqttpassword = self.leMQTTPass.text()
+                    if mqttpassword:
+                        backlog.append('mqttpassword {}'.format(mqttpassword))
+
+            if self.gbModule.isChecked():
+                if self.module_mode == 0:
+                    backlog.append('module {}'.format(self.cbModule.currentData()))
+
+                elif self.module_mode == 1:
+                    backlog.extend(['template {}'.format(self.leTemplate.text()), 'module 0'])
+
+            self.commands = 'backlog {}\n'.format(';'.join(backlog))
+
+            self.done(QDialog.Accepted)
+
+        
+class CommandDialog(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setMinimumWidth(640)
+        self.setWindowTitle('Serial Terminal')
+
+        self.commands = None
+        self.module_mode = 0
+
+        self.createUI()
+
+    def createUI(self):
+        vl = VLayout()
+        self.setLayout(vl)
+
+        # Console Output
+        consoleResponseField = QTextEdit()
+        consoleResponseField.setPlaceholderText("Command output will be shown here")
+        consoleResponseField.setReadOnly(True)
+        consoleResponseFieldLayout = HLayout()
+        consoleResponseFieldLayout.addWidget(consoleResponseField)
+
+        self.commandLine = QTextEdit()
+        self.commandLine.setPlaceholderText("You can write a multi-line command here")
+        commandLineLayout = HLayout()
+        commandLineLayout.addWidget(self.commandLine)
+        
+        self.pbSendCommand = QPushButton("Send Command")
+        self.pbSendCommand.setStyleSheet('background-color: #aaaa00;')
+        self.pbSendCommand.setFixedSize(QSize(200,50))
+        sendCommnadButtonLayout = HLayout()
+        sendCommnadButtonLayout.addWidget(self.pbSendCommand)
+        
+        # layout all widgets
+        vl.addLayout(consoleResponseFieldLayout)
+        vl.addLayout(commandLineLayout)
+        vl.addLayout(sendCommnadButtonLayout)
+    
+    def setModuleMode(self, radio):
+        self.module_mode = radio
+        self.cbModule.setVisible(not radio)
+        self.leTemplate.setVisible(radio)
+
+    def accept(self):
+        ok = True
+
+        # if self.gbWifi.isChecked() and (len(self.leAP.text()) == 0 or len(self.leAPPwd.text()) == 0):
+        #     ok = False
+        #     QMessageBox.warning(self, 'WiFi details incomplete', 'Input WiFi AP and Password')
+
+        if self.gbMQTT.isChecked() and not self.leBroker.text():
+            ok = False
+            QMessageBox.warning(self, 'MQTT details incomplete', 'Input broker hostname')
+
+        if self.module_mode == 1 and len(self.leTemplate.text()) == 0:
+            ok = False
+            QMessageBox.warning(self, 'Template string missing', 'Input template string')
+
+        if ok:
+            backlog = []
+
+            # if self.gbWifi.isChecked():
+            #     backlog.extend(['ssid1 {}'.format(self.leAP.text()), 'password1 {}'.format(self.leAPPwd.text())])
 
             if self.gbRecWifi.isChecked():
                 backlog.extend(['ssid2 Recovery', 'password2 a1b2c3d4'])
@@ -610,29 +712,29 @@ class Tasmotizer(QDialog):
         vl.addLayout(hl_btns)
         
         
-        self.commandLine = QLineEdit("command")
-        commandLineLayout = HLayout()
-        commandLineLayout.addWidget(self.commandLine)
+        # self.commandLine = QLineEdit("command")
+        # commandLineLayout = HLayout()
+        # commandLineLayout.addWidget(self.commandLine)
         
-        self.pbSendCommand = QPushButton("Send Command")
+        self.pbSendCommand = QPushButton("Serial Terminal")
         self.pbSendCommand.setStyleSheet('background-color: #aaaa00;')
         self.pbSendCommand.setFixedSize(QSize(200,50))
         sendCommnadButtonLayout = HLayout()
         sendCommnadButtonLayout.addWidget(self.pbSendCommand)
         
-        consoleResponseField = QPlainTextEdit()
-        consoleResponseFieldLayout = HLayout()
-        consoleResponseFieldLayout.addWidget(consoleResponseField)
+        # consoleResponseField = QPlainTextEdit()
+        # consoleResponseFieldLayout = HLayout()
+        # consoleResponseFieldLayout.addWidget(consoleResponseField)
 
-        vl.addLayout(consoleResponseFieldLayout)
-        vl.addLayout(commandLineLayout)
+        # vl.addLayout(consoleResponseFieldLayout)
+        # vl.addLayout(commandLineLayout)
         vl.addLayout(sendCommnadButtonLayout)
 
         quitLayout = HLayout()
         quitLayout.addWidgets([self.pbQuit])
         vl.addLayout(quitLayout)
 
-        self.pbSendCommand.clicked.connect(self.sendCommand)
+        self.pbSendCommand.clicked.connect(self.sendCommandDialog)
 
         pbRefreshPorts.clicked.connect(self.refreshPorts)
         self.rbgFW.buttonClicked[int].connect(self.setBinMode)
@@ -645,20 +747,58 @@ class Tasmotizer(QDialog):
         self.pbConfig.clicked.connect(self.send_config)
         self.pbGetIP.clicked.connect(self.get_ip)
         self.pbQuit.clicked.connect(self.reject)
+
+    # def openCommandDialog(self):
+    #     self.cmdDlg = CommandDialog()
+    #     self.cmdDlg.pbSendCommand.clicked.connect(self.sendCommand)
+    #     if self.cmdDlg.exec_() == QDialog.Accepted:
+    #         if self.cmdDlg.commandLine.text():
+    #             try:
+    #                 self.port = QSerialPort(self.cbxPort.currentData())
+    #                 self.port.setBaudRate(115200)
+    #                 self.port.open(QIODevice.OpenModeFlag.ReadWrite)
+    #                 formatedTxt = self.cmdDlg.commandLine.text().split()
+    #                 formatedTxt = " ".join(formatedTxt)
+    #                 print(formatedTxt)
+    #                 bytes_sent = self.port.write(bytes(formatedTxt, 'utf-8'))
+    #             except Exception as e:
+    #                 QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
+    #             else:
+    #                 QMessageBox.information(self, 'Done', 'Command sent ({} bytes).'.format(bytes_sent))
+    #                 # QMessageBox.information(self, 'Done', 'Configuration sent ({} bytes)\nDevice will restart.'.format(bytes_sent))
+    #             finally:
+    #                 if self.port.isOpen():
+    #                     self.port.close()
+    #         else:
+    #             QMessageBox.information(self, 'Done', 'Nothing to send')
     
+    def sendCommandDialog(self):
+        self.cmdDlg = CommandDialog()
+        self.cmdDlg.pbSendCommand.clicked.connect(self.sendCommand)
+        if self.cmdDlg.exec_() == QDialog.Accepted:
+            self.sendCommand()
+            
+
     def sendCommand(self):
-        try:
-            self.port = QSerialPort(self.cbxPort.currentData())
-            self.port.setBaudRate(115200)
-            self.port.open(QIODevice.OpenModeFlag.ReadWrite)
-            bytes_sent = self.port.write(bytes(self.commandLine.text(), 'utf-8'))
-        except Exception as e:
-            QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
-        finally:
-            if self.port.isOpen():
-                self.port.close()
-            QMessageBox.information(self, 'Done', 'Command sent ({} bytes).'.format(bytes_sent))
-    
+        if self.cmdDlg.commandLine.toPlainText():
+            try:
+                self.port = QSerialPort(self.cbxPort.currentData())
+                self.port.setBaudRate(115200)
+                self.port.open(QIODevice.OpenModeFlag.ReadWrite)
+                formatedTxt = self.cmdDlg.commandLine.toPlainText().split()
+                formatedTxt = " ".join(formatedTxt)
+                # print(formatedTxt)
+                bytes_sent = self.port.write(bytes(formatedTxt, 'utf-8'))
+            except Exception as e:
+                QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
+            else:
+                QMessageBox.information(self, 'Done', 'Command sent ({} bytes).'.format(bytes_sent))
+                # QMessageBox.information(self, 'Done', 'Configuration sent ({} bytes)\nDevice will restart.'.format(bytes_sent))
+            finally:
+                if self.port.isOpen():
+                    self.port.close()
+        else:
+            QMessageBox.information(self, 'Done', 'Nothing to send')
 
     def refreshPorts(self):
         self.cbxPort.clear()
