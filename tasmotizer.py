@@ -647,7 +647,17 @@ class Tasmotizer(QDialog):
         self.pbQuit.clicked.connect(self.reject)
     
     def sendCommand(self):
-        print(f"fake sending :> {self.commandLine.text()}")
+        try:
+            self.port = QSerialPort(self.cbxPort.currentData())
+            self.port.setBaudRate(115200)
+            self.port.open(QIODevice.OpenModeFlag.ReadWrite)
+            bytes_sent = self.port.write(bytes(self.commandLine.text(), 'utf-8'))
+        except Exception as e:
+            QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
+        finally:
+            if self.port.isOpen():
+                self.port.close()
+            QMessageBox.information(self, 'Done', 'Command sent ({} bytes).'.format(bytes_sent))
     
 
     def refreshPorts(self):
