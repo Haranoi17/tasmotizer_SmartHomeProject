@@ -282,6 +282,112 @@ class SendConfigDialog(QDialog):
 
             self.done(QDialog.Accepted)
 
+
+class PinConfigDialog(QDialog):
+    def __init__(self, port):
+        super().__init__()
+        self.setMinimumWidth(400)
+        self.setWindowTitle('Device pin configuration')
+        self.settings = QSettings('tasmotizer.cfg', QSettings.IniFormat)
+
+        self.commands = None
+        self.module_mode = 0
+
+        self.port = QSerialPort(port)
+        self.port.setBaudRate(115200)
+        self.port.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        self.createUI()
+        self.loadSettings()
+
+    def createUI(self):
+        vl = VLayout()
+        self.setLayout(vl)
+
+        # Module/template groupbox
+        self.gbModule = GroupBoxV('Module/template')
+        self.gbModule.setCheckable(True)
+        self.gbModule.setChecked(True)
+
+        hl_m_rb = HLayout()
+        self.rbModule = QRadioButton('Module')
+        self.rbModule.setChecked(True)
+        self.rbTemplate = QRadioButton('Template')
+        hl_m_rb.addWidgets([self.rbModule, self.rbTemplate])
+
+        self.rbgModule = QButtonGroup(self.gbModule)
+        self.rbgModule.addButton(self.rbModule, 0)
+        self.rbgModule.addButton(self.rbTemplate, 1)
+
+        self.cbModule = QComboBox()
+        for mod_id, mod_name in MODULES.items():
+            self.cbModule.addItem(mod_name, mod_id)
+
+        self.leTemplate = QLineEdit()
+        self.leTemplate.setPlaceholderText('Paste template string here')
+        self.leTemplate.setVisible(False)
+
+        self.gbModule.addLayout(hl_m_rb)
+        self.gbModule.addWidgets([self.cbModule, self.leTemplate])
+        self.rbgModule.buttonClicked[int].connect(self.setModuleMode)
+
+        # layout all widgets
+        hl_wifis_mqtt = HLayout(0)
+        # hl_wifis_mqtt.addWidget(self.gbMQTT)
+
+        vl.addLayout(hl_wifis_mqtt)
+        vl.addWidget(self.gbModule)
+
+        btns = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Close)
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        vl.addWidget(btns)
+
+    def loadSettings(self):
+        self.gbModule.setChecked(self.settings.value('gbModule', False, bool))
+
+        module_mode = self.settings.value('ModuleMode', 0, int)
+        for b in self.rbgModule.buttons():
+            if self.rbgModule.id(b) == module_mode:
+                b.setChecked(True)
+                self.setModuleMode(module_mode)
+        self.cbModule.setCurrentText(self.settings.value('Module', 'Generic'))
+        self.leTemplate.setText(self.settings.value('Template'))
+
+    def setModuleMode(self, radio):
+        self.module_mode = radio
+        self.cbModule.setVisible(not radio)
+        self.leTemplate.setVisible(radio)
+
+    def accept(self):
+        ok = True
+
+        # if self.gbWifi.isChecked() and (len(self.leAP.text()) == 0 or len(self.leAPPwd.text()) == 0):
+        #     ok = False
+        #     QMessageBox.warning(self, 'WiFi details incomplete', 'Input WiFi AP and Password')
+
+        # if self.gbMQTT.isChecked() and not self.leBroker.text():
+        #     ok = False
+        #     QMessageBox.warning(self, 'MQTT details incomplete', 'Input broker hostname')
+
+        if self.module_mode == 1 and len(self.leTemplate.text()) == 0:
+            ok = False
+            QMessageBox.warning(self, 'Template string missing', 'Input template string')
+
+        if ok:
+            backlog = []
+
+            if self.gbModule.isChecked():
+                if self.module_mode == 0:
+                    backlog.append('module {}'.format(self.cbModule.currentData()))
+
+                elif self.module_mode == 1:
+                    backlog.extend(['template {}'.format(self.leTemplate.text()), 'module 0'])
+
+            self.commands = 'backlog {}\n'.format(';'.join(backlog))
+
+            self.done(QDialog.Accepted)
+
         
 class CommandDialog(QWidget):
     def __init__(self, port):
@@ -700,8 +806,13 @@ class Tasmotizer(QDialog):
         self.pbSendCommand = QPushButton("Serial terminal")
         self.pbSendCommand.setStyleSheet('background-color: #aaaa00;')
         self.pbSendCommand.setFixedSize(QSize(200,50))
-        sendCommnadButtonLayout = HLayout()
-        sendCommnadButtonLayout.addWidgets([self.pbSendCommand])
+
+        self.pbPinConfig = QPushButton("Pin config")
+        self.pbPinConfig.setStyleSheet('background-color: #2a8a26;')
+        self.pbPinConfig.setFixedSize(QSize(200,50))
+
+        sendCommnadButtonLayout = HLayout([50, 3, 50, 3])
+        sendCommnadButtonLayout.addWidgets([self.pbSendCommand, self.pbPinConfig])
         
         vl.addLayout(sendCommnadButtonLayout)
 
@@ -710,6 +821,7 @@ class Tasmotizer(QDialog):
         vl.addLayout(quitLayout)
 
         self.pbSendCommand.clicked.connect(self.sendCommandDialog)
+        self.pbPinConfig.clicked.connect(self.openPinConfig)
 
         pbRefreshPorts.clicked.connect(self.refreshPorts)
         self.rbgFW.buttonClicked[int].connect(self.setBinMode)
@@ -725,6 +837,12 @@ class Tasmotizer(QDialog):
     
     def sendCommandDialog(self):
         self.cmdDlg = CommandDialog(port=self.cbxPort.currentData())
+        self.cmdDlg.show()
+        # if self.cmdDlg.exec_() == QDialog.Accepted:
+            # self.sendCommand()
+
+    def openPinConfig(self):
+        self.cmdDlg = PinConfigDialog(port=self.cbxPort.currentData())
         self.cmdDlg.show()
         # if self.cmdDlg.exec_() == QDialog.Accepted:
             # self.sendCommand()
