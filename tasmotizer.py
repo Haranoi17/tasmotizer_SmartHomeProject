@@ -285,75 +285,144 @@ class SendConfigDialog(QDialog):
 
 
 class PinConfigDialog(QDialog):
+
+    components_done = pyqtSignal()
+
     def __init__(self, port):
         super().__init__()
         self.setMinimumWidth(400)
         self.setWindowTitle('Device pin configuration')
         self.settings = QSettings('tasmotizer.cfg', QSettings.IniFormat)
 
+        self.read_data = []
         self.commands = None
         self.module_mode = 0
+
+        # UART setup
         self.port = QSerialPort(port)
+        self.port.setBaudRate(115200)
+        try:
+            self.port.open(QIODevice.ReadWrite)
+        except Exception as e:
+            QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
+        
         self.createUI()
-        # self.loadSettings()
+
+    def read_init_config(self):
+        self.components = None
+        self.gpios = None
+        self.jsons = []
+
+        pins_ret_match = re.compile(r"\d+:\d+:\d+.\d+ RSL: RESULT = \{.*\}")
+        self.brackets = {'{' : 0, '}' : -1}
+
+        try:
+            self.port.readyRead.connect(self.read_json)
+            self.components_done.connect(self.read_gpios)
+            self.port.write(bytes('GPIOs\n', 'utf8'))
+        except Exception as e:
+            QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
+
+    def read_gpios(self):
+        if self.components is not None:
+            self.components_done.disconnect(self.read_gpios)
+        try:
+            self.port.write(bytes('GPIO\n', 'utf8'))
+        except Exception as e:
+            QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
+
+
+    def read_json(self):
+        ret_match = re.compile(r"\d+:\d+:\d+.\d+ RSL: RESULT = \{.*\}")
+        json_match = re.compile(r"\{.*\}")
+        bracket_open = re.compile(rb'\{')
+        bracket_close = re.compile(rb'\}')
+        data = self.port.readAll()
+        self.brackets['{'] += len(bracket_open.findall(data))
+        if self.brackets['{'] > 0:
+            self.brackets['}'] = 0
+        self.brackets['}'] += len(bracket_close.findall(data))
+        self.data += data
+        if self.brackets['{'] - self.brackets['}'] == 0:
+            to_parse = str(self.data, 'utf-8').replace('\r', '').replace('\n', '')
+            print(ret_match.findall(to_parse))
+            ret = json_match.findall(to_parse)
+            if len(ret) > 0:
+                self.jsons.append(json.loads(ret[0]))
+            self.components_done.emit()
+            # print(self.jsons)
+            # self.jsons = [json.loads(str(d)) for d in json_match.findall(self.data)]
+            self.data = b''
 
     def getComponents(self):
         # QUerry the device over UART to get available components (digital and analog)
-        return json.loads("""{"0":"None","5728":"Option \
-A","32":"Button","64":"Button_n"\
-,"96":"Button_i","128":"Button_i\
-n","160":"Switch","192":"Switch_\
-n","3264":"Rotary A","3296":"Rot\
-ary B","6272":"Rotary A_n","6304\
-":"Rotary B_n","224":"Relay","25\
-6":"Relay_i","8672":"Relay_b","8\
-704":"Relay_bi","288":"Led","320\
-":"Led_i","352":"Counter","384":\
-"Counter_n","416":"PWM","448":"P\
-WM_i","480":"Buzzer","512":"Buzz\
-er_i","544":"LedLink","576":"Led\
-Link_i","3840":"Output Hi","3872\
-":"Output Lo","7584":"Heartbeat"\
-,"7616":"Heartbeat_i","8096":"Re\
-set","608":"I2C SCL","640":"I2C \
-SDA","832":"SSPI MISO","864":"SS\
-PI MOSI","896":"SSPI SCLK","928"\
-:"SSPI CS","960":"SSPI DC","3200\
-":"Serial Tx","3232":"Serial Rx"\
-,"1184":"DHT11","1216":"AM2301",\
-"1248":"SI7021","8128":"MS01","1\
-280":"DHT11_o","1312":"DS18x20",\
-"1344":"DS18x20_o","1376":"WS281\
-2","3136":"ALux IrRcv","3168":"A\
-Lux IrSel","3008":"MY92x1 DI","3\
-040":"MY92x1 DCKI","2912":"SM167\
-16 CLK","2944":"SM16716 DAT","29\
-76":"SM16716 PWR","4032":"SM2135\
- Clk","4064":"SM2135 Dat","8448"\
-:"SM2335 Clk","8480":"SM2335 Dat\
-","8384":"BP5758D Clk","8416":"B\
-P5758D Dat","2272":"Tuya Tx","23\
-04":"Tuya Rx","4128":"EXS Enable\
-","4640":"MOODL Tx","5568":"SHD \
-Boot 0","5600":"SHD Reset","1056\
-":"IRsend","1088":"IRrecv","2592\
-":"HLWBL SEL","2624":"HLWBL SEL_\
-i","2656":"HLWBL CF1","2688":"HL\
-W8012 CF","2720":"BL0937 CF","34\
-56":"ADE7953 IRQ","8832":"ADE795\
-3 RST","3072":"CSE7766 Tx","3104\
-":"CSE7766 Rx","2752":"MCP39F5 T\
-x","2784":"MCP39F5 Rx","2816":"M\
-CP39F5 Rst","1472":"PZEM0XX Tx",\
-"1504":"PZEM004 Rx","1536":"PZEM\
-016 Rx","1568":"PZEM017 Rx","748\
-8":"BL0939 Rx","5056":"BL0940 Rx\
-","7520":"BL0942 Rx","7072":"ZC \
-Pulse","1792":"SerBr Tx","1824":\
-"SerBr Rx","4096":"DeepSleep"}""")
+
+#         ret = """00:00:38.306 RSL: RESULT = {"0":"None","5728":"Option
+# A","32":"Button","64":"Button_n"
+# ,"96":"Button_i","128":"Button_i
+# n","160":"Switch","192":"Switch_
+# n","3264":"Rotary A","3296":"Rot
+# ary B","6272":"Rotary A_n","6304
+# ":"Rotary B_n","224":"Relay","25
+# 6":"Relay_i","8672":"Relay_b","8
+# 704":"Relay_bi","288":"Led","320
+# ":"Led_i","352":"Counter","384":
+# "Counter_n","416":"PWM","448":"P
+# WM_i","480":"Buzzer","512":"Buzz
+# er_i","544":"LedLink","576":"Led
+# Link_i","3840":"Output Hi","3872
+# ":"Output Lo","7584":"Heartbeat"
+# ,"7616":"Heartbeat_i","8096":"Re
+# set","608":"I2C SCL","640":"I2C 
+# SDA","832":"SSPI MISO","864":"SS
+# PI MOSI","896":"SSPI SCLK","928"
+# :"SSPI CS","960":"SSPI DC","3200
+# ":"Serial Tx","3232":"Serial Rx"
+# ,"1184":"DHT11","1216":"AM2301",
+# "1248":"SI7021","8128":"MS01","1
+# 280":"DHT11_o","1312":"DS18x20",
+# "1344":"DS18x20_o","1376":"WS281
+# 2","3136":"ALux IrRcv","3168":"A
+# Lux IrSel","3008":"MY92x1 DI","3
+# 040":"MY92x1 DCKI","2912":"SM167
+# 16 CLK","2944":"SM16716 DAT","29
+# 76":"SM16716 PWR","4032":"SM2135
+#  Clk","4064":"SM2135 Dat","8448"
+# :"SM2335 Clk","8480":"SM2335 Dat
+# ","8384":"BP5758D Clk","8416":"B
+# P5758D Dat","2272":"Tuya Tx","23
+# 04":"Tuya Rx","4128":"EXS Enable
+# ","4640":"MOODL Tx","5568":"SHD 
+# Boot 0","5600":"SHD Reset","1056
+# ":"IRsend","1088":"IRrecv","2592
+# ":"HLWBL SEL","2624":"HLWBL SEL_
+# i","2656":"HLWBL CF1","2688":"HL
+# W8012 CF","2720":"BL0937 CF","34
+# 56":"ADE7953 IRQ","8832":"ADE795
+# 3 RST","3072":"CSE7766 Tx","3104
+# ":"CSE7766 Rx","2752":"MCP39F5 T
+# x","2784":"MCP39F5 Rx","2816":"M
+# CP39F5 Rst","1472":"PZEM0XX Tx",
+# "1504":"PZEM004 Rx","1536":"PZEM
+# 016 Rx","1568":"PZEM017 Rx","748
+# 8":"BL0939 Rx","5056":"BL0940 Rx
+# ","7520":"BL0942 Rx","7072":"ZC 
+# Pulse","1792":"SerBr Tx","1824":
+# "SerBr Rx","4096":"DeepSleep"}"""
+
+        self.uart_send(b"GPIOs\n")
+#         ret = ret.replace('\n', '')
+#         ret = re.findall(json_match, ret)
+#         if len(ret)<1:
+#             return None
+#         return json.loads(ret[0])
 
     def getGPIOS(self):
         # Querry the device over UART to get actual pin config
+        # result_prefix = "[0-9:.]+\s*RSL:\s*RESULT\s*=\s*"
+        # # self.uart_send("GPIO")
+        # ret = ""
+        # re.sub(result_prefix, '', ret)
         return json.loads("""{
 
     "GPI O0":{
@@ -405,33 +474,33 @@ Pulse","1792":"SerBr Tx","1824":\
         vl = VLayout()
         self.setLayout(vl)
 
-        self.rbgModule = QButtonGroup()
-        self.cbModule = QComboBox()
+        self.pinBtnGroup = QButtonGroup()
+        # self.cbModule = QComboBox()
 
-        vGPIOLayout = VLayout()
-        gpio_pins = self.getGPIOS()
-        components = self.getComponents()
-        self.prev_setup = gpio_pins
-        self.comboBoxesForGPIOS = {}
+        # vGPIOLayout = VLayout()
+        # gpio_pins = self.getGPIOS()
+        # components = self.getComponents()
+        # self.prev_setup = gpio_pins
+        # self.comboBoxesForGPIOS = {}
 
-        for pin_id, pin_component in gpio_pins.items():
-            newComboBox = QComboBox()
-            for value, name in components.items():
-                newComboBox.addItem(f"{name} ({value})", value)
-                if list(pin_component.keys())[0].strip() == value.strip():
-                    newComboBox.setCurrentText(f"{name} ({value.strip()})")
+        # for pin_id, pin_component in gpio_pins.items():
+        #     newComboBox = QComboBox()
+        #     for value, name in components.items():
+        #         newComboBox.addItem(f"{name} ({value})", value)
+        #         if list(pin_component.keys())[0].strip() == value.strip():
+        #             newComboBox.setCurrentText(f"{name} ({value.strip()})")
 
-            self.comboBoxesForGPIOS[pin_id] = newComboBox
+        #     self.comboBoxesForGPIOS[pin_id] = newComboBox
             
-            labelComboLayout = HLayout()
-            labelComboLayout.addWidgets([QLabel(pin_id), newComboBox])
-            vGPIOLayout.addLayout(labelComboLayout)
+        #     labelComboLayout = HLayout()
+        #     labelComboLayout.addWidgets([QLabel(pin_id), newComboBox])
+        #     vGPIOLayout.addLayout(labelComboLayout)
 
-        # layout all widgets
-        hl_wifis_mqtt = HLayout(0)
+        # # layout all widgets
+        # hl_wifis_mqtt = HLayout(0)
 
-        vl.addLayout(hl_wifis_mqtt)
-        vl.addLayout(vGPIOLayout)
+        # vl.addLayout(hl_wifis_mqtt)
+        # vl.addLayout(vGPIOLayout)
 
         btns = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Close)
         btns.accepted.connect(self.accept)
@@ -457,13 +526,18 @@ Pulse","1792":"SerBr Tx","1824":\
             self.port.close()
 
     def accept(self):
-        for pin, option in self.comboBoxesForGPIOS.items():
-            if list(self.prev_setup[pin].keys())[0] == option.currentData():
-                continue
-            cmd = f"{pin.replace(' ', '')} {option.currentData()}\n"
-            self.uart_send(bytes(cmd, 'ascii'))
+        pass
+        # for pin, option in self.comboBoxesForGPIOS.items():
+        #     if list(self.prev_setup[pin].keys())[0] == option.currentData():
+        #         continue
+        #     cmd = f"{pin.replace(' ', '')} {option.currentData()}\n"
+        #     self.uart_send(bytes(cmd, 'ascii'))
 
-            self.done(QDialog.Accepted)
+        self.done(QDialog.Accepted)
+
+    def closeEvent(self, a0: QCloseEvent) -> None:
+        self.port.close()
+        return super().closeEvent(a0)
 
         
 class CommandDialog(QWidget):
