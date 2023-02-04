@@ -28,7 +28,6 @@ __version__ = '1.2.1'
 
 BINS_URL = 'http://ota.tasmota.com'
 
-
 class ESPWorker(QObject):
     error = pyqtSignal(Exception)
     waiting = pyqtSignal()
@@ -296,9 +295,10 @@ class PinConfigDialog(QDialog):
         self.module_mode = 0
         self.port = QSerialPort(port)
         self.createUI()
-        self.loadSettings()
+        # self.loadSettings()
 
     def getComponents(self):
+        # QUerry the device over UART to get available components (digital and analog)
         return json.loads("""{"0":"None","5728":"Option \
 A","32":"Button","64":"Button_n"\
 ,"96":"Button_i","128":"Button_i\
@@ -353,13 +353,14 @@ Pulse","1792":"SerBr Tx","1824":\
 "SerBr Rx","4096":"DeepSleep"}""")
 
     def getGPIOS(self):
+        # Querry the device over UART to get actual pin config
         return json.loads("""{
 
     "GPI O0":{
         "0":"None"
     },
     "GPIO1":{
-        "0":"N one"
+        "0":"None"
     },
     "GPIO2":{
         "416":"PWM1"
@@ -368,7 +369,7 @@ Pulse","1792":"SerBr Tx","1824":\
         "0":"None"
     },
     "GPIO4":{
-        "0":" None"
+        "0":"None"
     },
     "GPIO5":{
         "0":"None"
@@ -404,58 +405,32 @@ Pulse","1792":"SerBr Tx","1824":\
         vl = VLayout()
         self.setLayout(vl)
 
-        # Module/template groupbox
-        self.gbModule = GroupBoxV('Module/template')
-        self.gbModule.setCheckable(True)
-        self.gbModule.setChecked(True)
-
-        hl_m_rb = HLayout()
-        self.rbModule = QRadioButton('Module')
-        self.rbModule.setChecked(True)
-        self.rbTemplate = QRadioButton('Template')
-        hl_m_rb.addWidgets([self.rbModule, self.rbTemplate])
-
-        self.rbgModule = QButtonGroup(self.gbModule)
-        self.rbgModule.addButton(self.rbModule, 0)
-        self.rbgModule.addButton(self.rbTemplate, 1)
-
+        self.rbgModule = QButtonGroup()
         self.cbModule = QComboBox()
-        for mod_id, mod_name in MODULES.items():
-            self.cbModule.addItem(mod_name, mod_id)
-
-        self.leTemplate = QLineEdit()
-        self.leTemplate.setPlaceholderText('Paste template string here')
-        self.leTemplate.setVisible(False)
-
-        self.gbModule.addLayout(hl_m_rb)
-        self.gbModule.addWidgets([self.cbModule, self.leTemplate])
-        self.rbgModule.buttonClicked[int].connect(self.setModuleMode)
 
         vGPIOLayout = VLayout()
-        gpios = self.getGPIOS()
-        gpioDict = self.getComponents()
+        gpio_pins = self.getGPIOS()
+        components = self.getComponents()
+        self.prev_setup = gpio_pins
         self.comboBoxesForGPIOS = {}
 
-        for gpioNumber, currentModule in gpios.items():
+        for pin_id, pin_component in gpio_pins.items():
             newComboBox = QComboBox()
-            for value, name in gpioDict.items():
-                newComboBox.addItem(f"{name} ({value})")
+            for value, name in components.items():
+                newComboBox.addItem(f"{name} ({value})", value)
+                if list(pin_component.keys())[0].strip() == value.strip():
+                    newComboBox.setCurrentText(f"{name} ({value.strip()})")
 
-            self.comboBoxesForGPIOS[gpioNumber] = newComboBox
+            self.comboBoxesForGPIOS[pin_id] = newComboBox
             
             labelComboLayout = HLayout()
-            labelComboLayout.addWidgets([QLabel(gpioNumber), newComboBox])
+            labelComboLayout.addWidgets([QLabel(pin_id), newComboBox])
             vGPIOLayout.addLayout(labelComboLayout)
 
-
-        print(self.comboBoxesForGPIOS)
         # layout all widgets
         hl_wifis_mqtt = HLayout(0)
-        # hl_wifis_mqtt.addWidget(self.gbMQTT)
-
 
         vl.addLayout(hl_wifis_mqtt)
-        vl.addWidget(self.gbModule)
         vl.addLayout(vGPIOLayout)
 
         btns = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Close)
@@ -463,30 +438,17 @@ Pulse","1792":"SerBr Tx","1824":\
         btns.rejected.connect(self.reject)
         vl.addWidget(btns)
 
-    def loadSettings(self):
-        self.gbModule.setChecked(self.settings.value('gbModule', False, bool))
-
-        module_mode = self.settings.value('ModuleMode', 0, int)
-        for b in self.rbgModule.buttons():
-            if self.rbgModule.id(b) == module_mode:
-                b.setChecked(True)
-                self.setModuleMode(module_mode)
-        self.cbModule.setCurrentText(self.settings.value('Module', 'Generic'))
-        self.leTemplate.setText(self.settings.value('Template'))
 
     def setModuleMode(self, radio):
         self.module_mode = radio
         self.cbModule.setVisible(not radio)
-        self.leTemplate.setVisible(radio)
 
-    def accept(self):
-        ok = True
-
+    def uart_send(self, msg:bytes):
         try:
             self.port.setBaudRate(115200)
             self.port.open(QIODevice.OpenModeFlag.ReadWrite)
 
-            self.port.write(b"co kolwiek ja se to dopisze")
+            self.port.write(msg)
             self.port.waitForBytesWritten()
            
         except Exception as e:
@@ -494,30 +456,12 @@ Pulse","1792":"SerBr Tx","1824":\
         finally:
             self.port.close()
 
-
-        # if self.gbWifi.isChecked() and (len(self.leAP.text()) == 0 or len(self.leAPPwd.text()) == 0):
-        #     ok = False
-        #     QMessageBox.warning(self, 'WiFi details incomplete', 'Input WiFi AP and Password')
-
-        # if self.gbMQTT.isChecked() and not self.leBroker.text():
-        #     ok = False
-        #     QMessageBox.warning(self, 'MQTT details incomplete', 'Input broker hostname')
-
-        if self.module_mode == 1 and len(self.leTemplate.text()) == 0:
-            ok = False
-            QMessageBox.warning(self, 'Template string missing', 'Input template string')
-
-        if ok:
-            backlog = []
-
-            if self.gbModule.isChecked():
-                if self.module_mode == 0:
-                    backlog.append('module {}'.format(self.cbModule.currentData()))
-
-                elif self.module_mode == 1:
-                    backlog.extend(['template {}'.format(self.leTemplate.text()), 'module 0'])
-
-            self.commands = 'backlog {}\n'.format(';'.join(backlog))
+    def accept(self):
+        for pin, option in self.comboBoxesForGPIOS.items():
+            if list(self.prev_setup[pin].keys())[0] == option.currentData():
+                continue
+            cmd = f"{pin.replace(' ', '')} {option.currentData()}\n"
+            self.uart_send(bytes(cmd, 'ascii'))
 
             self.done(QDialog.Accepted)
 
