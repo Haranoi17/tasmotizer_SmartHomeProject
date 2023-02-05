@@ -342,10 +342,6 @@ class PinConfigDialog(QDialog):
 #         except Exception as e:
 #             QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
 
-    def readingDoneCallback(self):
-        print("dupa")
-        print(self.modules)
-        print(self.pins)
 
     def parseModules(self, response:str):
         if self.modules is None:
@@ -399,14 +395,14 @@ class PinConfigDialog(QDialog):
             self.uartReadData = self.uartReadData[brackets_closed+1:]
 
     def createUI(self):
-        vl = VLayout()
-        self.setLayout(vl)
+        self.vl = VLayout()
+        self.setLayout(self.vl)
 
         self.loadingTextBox = QLabel()
         self.loadingTextBox.setText("Waiting for Tasmota...")
         self.loadingTextBox.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        vl.addWidget(self.loadingTextBox)
+        self.vl.addWidget(self.loadingTextBox)
 
         self.pinBtnGroup = QButtonGroup()
         # self.cbModule = QComboBox()
@@ -439,32 +435,59 @@ class PinConfigDialog(QDialog):
         btns = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Close)
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
-        vl.addWidget(btns)
+        self.vl.addWidget(btns)
 
-    # def uart_send(self, msg:bytes):
-    #     try:
-    #         self.port.setBaudRate(115200)
-    #         self.port.open(QIODevice.OpenModeFlag.ReadWrite)
+    def readingDoneCallback(self):
+        print(self.modules)
+        print(self.pins)
 
-    #         self.port.write(msg)
-    #         self.port.waitForBytesWritten()
-           
-    #     except Exception as e:
-    #         QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
-    #     finally:
-    #         self.port.close()
+        self.loadingTextBox.setText("Available Pins")
+        self.loadingTextBox.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+
+        vGPIOLayout = VLayout()
+        # gpio_pins = self.getGPIOS()
+        components = self.modules['GPIOs1']
+        self.comboBoxesForGPIOS = {}
+
+        for pin_id, pin_component in self.pins.items():
+            newComboBox = QComboBox()
+            for value, name in components.items():
+                newComboBox.addItem(f"{name} ({value})", value)
+                if list(pin_component.keys())[0].strip() == value.strip():
+                    newComboBox.setCurrentText(f"{name} ({value.strip()})")
+
+            self.comboBoxesForGPIOS[pin_id] = newComboBox
+            
+            labelComboLayout = HLayout()
+            labelComboLayout.addWidgets([QLabel(pin_id), newComboBox])
+            vGPIOLayout.addLayout(labelComboLayout)
+
+        # layout all widgets
+        # hl_wifis_mqtt = HLayout(0)
+        self.vl.insertLayout(1, vGPIOLayout)
+        self.resize(400,500)
 
     def accept(self):
-        self.port.close()
         self.done(QDialog.Accepted)
-        # for pin, option in self.comboBoxesForGPIOS.items():
-        #     if list(self.prev_setup[pin].keys())[0] == option.currentData():
-        #         continue
-        #     cmd = f"{pin.replace(' ', '')} {option.currentData()}\n"
-        #     self.uart_send(bytes(cmd, 'ascii'))
+        for pin, option in self.comboBoxesForGPIOS.items():
+            prev = int(list(self.pins[pin].keys())[0].strip())
+            curr = int(option.currentData())
+            if prev == curr:
+                continue
+            cmd = f"{pin.replace(' ', '')} {option.currentData()}\n"
+            print("send", cmd)
+            try:
+                self.port.write(bytes(cmd, 'utf-8'))
+            except Exception as e:
+                print("dupa")
+                QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
+        if not self.port.waitForBytesWritten(5000):
+            QMessageBox.critical(self, 'Error', f'Failed to send commands.')
+        self.port.close()
 
     def reject(self):
-        self.port.close()
+        if self.port.isOpen():
+            self.port.close()
         self.done(QDialog.Accepted)
         # for pin, option in self.comboBoxesForGPIOS.items():
         #     if list(self.prev_setup[pin].keys())[0] == option.currentData():
