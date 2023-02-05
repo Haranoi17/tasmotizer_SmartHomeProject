@@ -384,15 +384,12 @@ class PinConfigDialog(QDialog):
 
         self.pinBtnGroup = QButtonGroup()
 
-        btns = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Close)
-        btns.accepted.connect(self.accept)
-        btns.rejected.connect(self.reject)
-        self.vl.addWidget(btns)
+        self.btns = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Close)
+        self.btns.rejected.connect(self.reject)
+        self.btns.accepted.connect(self.reject)
+        self.vl.addWidget(self.btns)
 
     def readingDoneCallback(self):
-        print(self.modules)
-        print(self.pins)
-
         self.loadingTextBox.setText("Available Pins")
         self.loadingTextBox.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
@@ -413,6 +410,8 @@ class PinConfigDialog(QDialog):
             labelComboLayout.addWidgets([QLabel(pin_id), newComboBox])
             vGPIOLayout.addLayout(labelComboLayout)
 
+        self.btns.accepted.disconnect(self.reject)
+        self.btns.accepted.connect(self.accept)
         self.vl.insertLayout(1, vGPIOLayout)
         self.resize(400,500)
 
@@ -424,14 +423,12 @@ class PinConfigDialog(QDialog):
             if prev == curr:
                 continue
             cmd = f"{pin.replace(' ', '')} {option.currentData()}\n"
-            print("send", cmd)
             try:
                 self.port.write(bytes(cmd, 'utf-8'))
+                if not self.port.waitForBytesWritten(5000):
+                    raise(f"Failed to send command: {cmd}")
             except Exception as e:
-                print("dupa")
                 QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
-        if not self.port.waitForBytesWritten(5000):
-            QMessageBox.critical(self, 'Error', f'Failed to send commands.')
         self.port.close()
 
     def reject(self):
