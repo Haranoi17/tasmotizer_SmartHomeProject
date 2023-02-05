@@ -320,28 +320,6 @@ class PinConfigDialog(QDialog):
             QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
         self.port.readyRead.connect(self.uart_response_reader)
         self.responseMatched.connect(self.parse_respone)
-#         self.components = None
-#         self.gpios = None
-#         self.jsons = []
-
-#         pins_ret_match = re.compile(r"\d+:\d+:\d+.\d+ RSL: RESULT = \{.*\}")
-        
-
-#         try:
-#             self.port.readyRead.connect(self.read_json)
-#             self.components_done.connect(self.read_gpios)
-#             self.port.write(bytes('GPIOs\n', 'utf8'))
-#         except Exception as e:
-#             QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
-
-#     def read_gpios(self):
-#         if self.components is not None:
-#             self.components_done.disconnect(self.read_gpios)
-#         try:
-#             self.port.write(bytes('GPIO\n', 'utf8'))
-#         except Exception as e:
-#             QMessageBox.critical(self, 'Error', f'Port access error:\n{e}')
-
 
     def parseModules(self, response:str):
         if self.modules is None:
@@ -405,32 +383,6 @@ class PinConfigDialog(QDialog):
         self.vl.addWidget(self.loadingTextBox)
 
         self.pinBtnGroup = QButtonGroup()
-        # self.cbModule = QComboBox()
-
-        # vGPIOLayout = VLayout()
-        # gpio_pins = self.getGPIOS()
-        # components = self.getComponents()
-        # self.prev_setup = gpio_pins
-        # self.comboBoxesForGPIOS = {}
-
-        # for pin_id, pin_component in gpio_pins.items():
-        #     newComboBox = QComboBox()
-        #     for value, name in components.items():
-        #         newComboBox.addItem(f"{name} ({value})", value)
-        #         if list(pin_component.keys())[0].strip() == value.strip():
-        #             newComboBox.setCurrentText(f"{name} ({value.strip()})")
-
-        #     self.comboBoxesForGPIOS[pin_id] = newComboBox
-            
-        #     labelComboLayout = HLayout()
-        #     labelComboLayout.addWidgets([QLabel(pin_id), newComboBox])
-        #     vGPIOLayout.addLayout(labelComboLayout)
-
-        # # layout all widgets
-        # hl_wifis_mqtt = HLayout(0)
-
-        # vl.addLayout(hl_wifis_mqtt)
-        # vl.addLayout(vGPIOLayout)
 
         btns = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Close)
         btns.accepted.connect(self.accept)
@@ -445,7 +397,6 @@ class PinConfigDialog(QDialog):
         self.loadingTextBox.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
         vGPIOLayout = VLayout()
-        # gpio_pins = self.getGPIOS()
         components = self.modules['GPIOs1']
         self.comboBoxesForGPIOS = {}
 
@@ -462,8 +413,6 @@ class PinConfigDialog(QDialog):
             labelComboLayout.addWidgets([QLabel(pin_id), newComboBox])
             vGPIOLayout.addLayout(labelComboLayout)
 
-        # layout all widgets
-        # hl_wifis_mqtt = HLayout(0)
         self.vl.insertLayout(1, vGPIOLayout)
         self.resize(400,500)
 
@@ -489,11 +438,6 @@ class PinConfigDialog(QDialog):
         if self.port.isOpen():
             self.port.close()
         self.done(QDialog.Accepted)
-        # for pin, option in self.comboBoxesForGPIOS.items():
-        #     if list(self.prev_setup[pin].keys())[0] == option.currentData():
-        #         continue
-        #     cmd = f"{pin.replace(' ', '')} {option.currentData()}\n"
-        #     self.uart_send(bytes(cmd, 'ascii'))
 
         
 class CommandDialog(QWidget):
